@@ -1,16 +1,18 @@
 
 var vertices = []
 var edges = []
+var settings = {}
 
 var forceWeightText = false
 var fixed = 3
 
-'sin,cos,tan,atan2,sqrt,PI,abs,min,max,pow'.split(',').forEach(x => { window[x] = Math[x]; })
+// common math functions/constants, that I want to use without Math prefix
+'sin,cos,atan2,sqrt,PI,abs,min,max,pow'.split(',').forEach(func => { window[func] = Math[func]; })
 
 function readHTMLArgs(){
 	try {
 		var allArgs = window.location.search.substr(1)
-		var json = allArgs.split('data=')[1].split('=')[0]
+		var json = (allArgs.split('data=')[1] || '').split('=')[0]
 		json = decodeURIComponent(json)
 		importData(json)
 	} catch(e){
@@ -18,6 +20,8 @@ function readHTMLArgs(){
 	}
 }
 
+// does a path exist from dst to src?
+// if so, and src->dst exists, we need to offset the arrows, so they don't overlap
 function symmetricPathExists(src, dst){
 	for(var i=0;i<edges.length;i++){
 		var e = edges[i]
@@ -28,20 +32,46 @@ function symmetricPathExists(src, dst){
 function importData(json){
 	try {
 		if(json[0] != '{') json = atob(json)
+		if(!json.length) return
 		var data = JSON.parse(json);
+		settings = data.settings || data.s || settings || {}
 		vertices = data.vertices || data.v || vertices
-		vertices = vertices.map(v => {
-			return (v.x === undefined) ? 
+		vertices = vertices.map(v => {// convert vertices in array shape to objects
+			return v.x === undefined ? 
 				{name: v[0], x: v[1], y: v[2]}
 			: v
 		})
-		vertices.forEach(v => {
-			v.name = v.name || v.n
-			delete v.n
-		})
 		edges = data.edges || data.e || edges
+		// remove invalid edges
 		var vs = vertices.length
-		edges = edges.filter(e => e[0] < vs && e[1] < vs && e[2])
+		edges.forEach(e => {
+			// correct float vertex indices
+			e[0] = (e[0] | 0) || 0
+			e[1] = (e[1] | 0) || 0
+		})
+		// remove duplicate edges, because the ui can't handle them
+		// ignore it, if an additional flag is set, because O(n²) is too expensive for large graphs
+		if(!settings.dontCareAboutUI){
+			for(var i=1;i<edges.length;i++){
+				var e = edges[i]
+				var src = e[0]
+				var dst = e[1]
+				for(var j=0;j<i-1;j++){
+					var e2 = edges[j]
+					if(e2 && e2[0] == src && e2[1] == dst){
+						// update the weight
+						e[2] = (e[2]*1 || 0) + (e2[2]*1 || 0) 
+						// delete the edge
+						edges[i] = null
+						break
+					}
+				}
+			}
+		}
+		edges = edges.filter(e => 
+			e &&
+			e[0] >= 0 && e[0] < vs && 
+			e[1] >= 0 && e[1] < vs && e[2])
 	} catch(e){
 		console.log(e)
 	}
@@ -95,9 +125,25 @@ function calculatePageRank(){
 	// todo use preference vector instead of random, if available
 	var preferenceVector;
 	try {
-		var pvValue = prPreferenceVector.value.trim()
-		if(pvValue.length)
-			preferenceVector = JSON.parse(pvValue)
+		var pvJSON = prPreferenceVector.value.trim()
+		var pvValue = pvJSON ? JSON.parse(pvJSON) : 0
+		if(pvValue){
+			if(Array.isArray(pvValue)){
+				preferenceVector = JSON.parse(pvValue)
+			} else if(typeof pvValue == 'object'){
+				// indexed representation is allowed, too
+				// it's converted to an array for normalization;
+				// normalization could be done on the object, too...
+				// shouldn't really matter that much
+				preferenceVector = new Float64Array(vertices.length)
+				for(key in pvValue){
+					key = (key*1)|0
+					if(key >= 0 && key < vertices.length){
+						preferenceVector[key] = pvValue[key] * 1 || 0
+					}
+				}
+			}
+		}
 	} catch(e){
 		console.log(e)
 	}
@@ -214,31 +260,41 @@ function calculateHITS(){
 	})
 }
 
-var center = { x: 0, y: 0 }
-var zoom = 0.1
 
+// rendering
 var ellipseW = 1
 var ellipseH = 0.6
 
-var selectedNode = null
-var scale = 1
-
-// rendering
 var bothDirsOffset = 9
+
+// ui
+var center = { x: 0, y: 0 }
+var zoom = 0.1
+
+var selected = null
+var scale = 1
 
 function render(changeInput){
 	
-	if(changeInput){
+	if(changeInput && !settings.disableJSONDataExport){
 		document
 			.getElementById('importData')
 			.value = JSON.stringify({ edges, vertices })
 	}
 	
-	// make the link for sharing smaller by removing calculated values
-	var v2 = vertices.map(v => [v.name, v.x.toFixed(2)*1, v.y.toFixed(2)*1])
-	document
-		.getElementById('shareGraph')
-		.value = 'https://phychi.com/pagerank/calc?data='+btoa(JSON.stringify({ e: edges, v: v2 }))
+	if(!settings.disableShareLink){
+		// make the link for sharing smaller by removing calculated values,
+		// and by converting the object to an array
+		var v2 = vertices.map(v => [v.name, v.x.toFixed(2)*1, v.y.toFixed(2)*1])
+		document
+			.getElementById('shareGraph')
+			.value = 'https://phychi.com/pagerank/calc?data='+btoa(JSON.stringify({ e: edges, v: v2 }))
+	}
+	
+	if(settings.dontCareAboutUI){
+		// may be too expensive
+		return
+	}
 	
 	// use svg instead of canvas? maybe...
 	
@@ -271,7 +327,7 @@ function render(changeInput){
 			// only is approximately correct... why?
 			angledLength *= len0/(abs(dx0)+abs(dy0))
 			
-			var color = e === selectedNode ? selectedColor : '#aaa'
+			var color = e === selected ? selectedColor : '#aaa'
 			
 			dx *= len
 			dy *= len
@@ -298,21 +354,17 @@ function render(changeInput){
 				ctx.closePath()
 				ctx.fillStyle = color
 				ctx.fill()
-				
-				// ctx.lineWidth = 1/scale
-				// ctx.strokeStyle = '#aaa'
-				// ctx.stroke()
 			}
 			if(weight != 1 || forceWeightText){
-				// todo draw text of the weight on the arrow :)
+				// draw text of the weight on the arrow :)
 				ctx.fillStyle = color
 				var x = (src.x+dst.x)/2 + dy * bothDirsOffset
 				var y = (src.y+dst.y)/2 - dx * bothDirsOffset
 				ctx.save()
 				ctx.translate(x, y)
-				// todo rotate 90° max xD
 				var angle = atan2(dy,dx)
 				var sign = 1
+				// rotate 90° max
 				if(angle < -PI/2) angle += PI, sign *= -1
 				if(angle > +PI/2) angle -= PI, sign *= -1
 				ctx.rotate(angle)
@@ -324,9 +376,9 @@ function render(changeInput){
 	var textHeight = 0.22
 	ctx.font = textHeight + 'px Verdana'
 	vertices.forEach((v, i) => {
-		var color = v === selectedNode ? selectedColor : '#aaa'
+		var color = v === selected ? selectedColor : '#aaa'
 		ctx.beginPath();
-		ctx.ellipse(v.x, v.y, ellipseW, ellipseH, 0, 0, Math.PI*2)
+		ctx.ellipse(v.x, v.y, ellipseW, ellipseH, 0, 0, PI*2)
 		ctx.lineWidth = 3/scale
 		ctx.strokeStyle = color
 		ctx.stroke()
@@ -366,6 +418,8 @@ Array.prototype.remove = function(object) {
 	if(index >= 0) this.splice(index, 1)
 };
 
+// event handlers
+// I don't intend to use 3rd party libraries, so window.onevent is ok to use
 window.onresize = render
 var oc = [prRandomJump,prPreferenceVector,prNormalize,hitsNormalize];
 oc.forEach(x => {
@@ -386,21 +440,24 @@ id.onkeyup = function(){
 	update(false)
 }
 
-canvas.onmousewheel = function(e){
-	var delta = e.deltaY / 100 // default: 100
-	// todo zoom on cursor...
+function changeZoom(amount, mx, my){
 	var oldZoom = zoom;
-	zoom = clamp(zoom * pow(1.2, -delta), 0.001, 1000.0)
+	zoom = clamp(zoom * amount, 0.001, 1000.0)
 	var deltaZoom = oldZoom - zoom;
-	var x = e.pageX || e.offsetX
-	var y = e.pageY || e.offsetY
-	x = x/innerWidth*2-1
-	y = y/innerHeight*2-1
+	var x = mx/innerWidth*2-1
+	var y = my/innerHeight*2-1
 	center.x -= deltaZoom * x
 	center.y -= deltaZoom * y
 	render(false)
 }
 
+canvas.onmousewheel = function(e){
+	var delta = e.deltaY / 100 // default: 100
+	// todo zoom correctly on cursor...
+	changeZoom(pow(1.12, -delta), e.pageX || e.offsetX, e.pageY || e.offsetY)
+}
+
+// convert screen coordinates to object/data/node coordinates
 function screen2Data(x,y){
 	var w = window.innerWidth
 	var h = window.innerHeight
@@ -414,33 +471,35 @@ function screen2Data(x,y){
 	return [x,y]
 }
 
+// dragging & selecting
 var startX = 0
 var startY = 0
 
 var selectedColor = '#c8ca81'
 
 var dragging = false
-var selectedNode = null;
+var selected = null;
+
 canvas.onmousemove = function(e){
 	if(dragging){
 		var h = window.innerHeight
 		var scale = zoom * h
 		var dx = e.movementX / scale
 		var dy = e.movementY / scale
-		if(selectedNode){
+		if(selected){
 			// move the node
-			if(selectedNode.pr !== undefined){
+			if(selected.pr !== undefined){
 				// a node
-				selectedNode.x += dx
-				selectedNode.y += dy
-				selectedNode.x = selectedNode.x.toFixed(3)*1
-				selectedNode.y = selectedNode.y.toFixed(3)*1
+				selected.x += dx
+				selected.y += dy
+				selected.x = selected.x.toFixed(3)*1
+				selected.y = selected.y.toFixed(3)*1
 			} else {
 				// a path, array
 				// change the weight
 				var delta = (e.movementX - e.movementY)/h
-				selectedNode[2] = (0.1 + selectedNode[2]) * pow(5, delta) - 0.1
-				selectedNode[2] = selectedNode[2].toFixed(3)*1
+				selected[2] = (0.1 + selected[2]) * pow(5, delta) - 0.1
+				selected[2] = selected[2].toFixed(3)*1
 			}
 		} else {
 			// move the screen origin
@@ -451,22 +510,18 @@ canvas.onmousemove = function(e){
 	}
 }
 
-function getTime(){
-	return new Date().getTime() * 0.001
-}
-
 canvas.ondblclick = function(e){
 	e.preventDefault()
-	var mx = e.offsetX
-	var my = e.offsetY
+	var mx = e.offsetX || e.pageX
+	var my = e.offsetY || e.pageY
 	var xy = screen2Data(mx,my)
-	var x = xy[0]
-	var y = xy[1]
-	if(selectedNode){
-		if(selectedNode.x !== undefined){
-			selectedNode.name = prompt('Enter new node name:', selectedNode.name) || selectedNode.name
+	var x = xy[0].toFixed(3)*1
+	var y = xy[1].toFixed(3)*1
+	if(selected){
+		if(selected.x !== undefined){
+			selected.name = prompt('Enter new node name:', selected.name) || selected.name
 		} else {
-			selectedNode[2] = prompt('Enter new path weight:', selectedNode[2].toFixed(2)) * 1 || selectedNode[2]
+			selected[2] = prompt('Enter new path weight:', selected[2].toFixed(2)) * 1 || selected[2]
 		}
 	} else {
 		vertices.push({
@@ -477,6 +532,9 @@ canvas.ondblclick = function(e){
 	update(true);
 }
 
+// find the element at that mouse location
+// if ignored is specified (not undefined), then edges and "ignored" are ignored
+// this is used for dragging nodes onto other nodes
 function getElementAt(mx,my,ignored){
 	var xy = screen2Data(mx,my)
 	var x = xy[0]
@@ -520,26 +578,26 @@ function getElementAt(mx,my,ignored){
 
 canvas.onmousedown = function(e){
 	// find the node at x,y
-	var mx = e.offsetX
-	var my = e.offsetY
+	var mx = e.offsetX || e.pageX || 0
+	var my = e.offsetY || e.pageY || 0
 	var xy = screen2Data(mx,my)
 	startX = xy[0].toFixed(3)*1
 	startY = xy[1].toFixed(3)*1
-	selectedNode = getElementAt(mx,my)
+	selected = getElementAt(mx,my)
 	dragging = true
 }
 
 canvas.onmouseup = function(e){
-	var mx = e.offsetX
-	var my = e.offsetY
-	if(selectedNode && selectedNode.name !== undefined){
-		var draggedOnto = getElementAt(mx, my, selectedNode)
+	var mx = e.offsetX || e.pageX || 0
+	var my = e.offsetY || e.pageY || 0
+	if(selected && selected.name !== undefined){
+		var draggedOnto = getElementAt(mx, my, selected)
 		if(draggedOnto && draggedOnto.name !== undefined){
-			// todo (un)connect them and reset the coordinates
-			selectedNode.x = startX
-			selectedNode.y = startY
+			// (un)connect them and reset the coordinates
+			selected.x = startX
+			selected.y = startY
 			var wasFound = false
-			var src = selectedNode
+			var src = selected
 			var dst = draggedOnto
 			var srcI = vertices.indexOf(src)
 			var dstI = vertices.indexOf(dst)
@@ -561,27 +619,115 @@ canvas.onmouseup = function(e){
 	dragging = false
 }
 
-document.onkeydown = function(e){
-	if(e.key == 'Delete'){
-		if(selectedNode){
-			if(selectedNode.x !== undefined){
-				var index = vertices.indexOf(selectedNode)
-				if(index >= 0){
-					vertices.removeAt(index)
-					edges = edges.filter(e => e[0] != index && e[1] != index)
-					edges.forEach(e => {
-						if(e[0] > index) e[0]--
-						if(e[1] > index) e[1]--
-					})
-				}
-				// todo update all edges...
-			} else {
-				edges.remove(selectedNode)
+function deleteSelected(){
+	if(selected){
+		if(selected.x !== undefined){
+			var index = vertices.indexOf(selected)
+			if(index >= 0){
+				vertices.removeAt(index)
+				// update all edges
+				edges = edges.filter(e => e[0] != index && e[1] != index)
+				edges.forEach(e => {
+					if(e[0] > index) e[0]--
+					if(e[1] > index) e[1]--
+				})
 			}
-			update(true)
+		} else {
+			edges.remove(selected)
 		}
+		update(true)
 	}
 }
+
+// make the canvas be able to listen to key events
+canvas.tabIndex = 1000
+canvas.style.outline = 'none' // just in case it gets a dotted outline ;)
+canvas.onkeydown = function(e){
+	if(e.key == 'Delete'){
+		deleteSelected()
+	}
+}
+
+// touch controls for mobile users
+var lastDown = 0
+var lastTouchCtr = 0
+var lastTouch = {}
+function updateTouches(e, isStart){
+	e.preventDefault()
+	var touches = e.touches
+	var downTime = new Date().getTime() * 0.001
+	switch(touches.length){
+		case 0:
+			canvas.onmouseup({
+				pageX: lastTouch.x,
+				pageY: lastTouch.y
+			})
+			break;
+		case 1:
+			var touch = touches[0]
+			touch.preventDefault = e => 0
+			if(isStart && lastDown && abs(downTime - lastDown) < 0.3){
+				// double click
+				canvas.ondblclick(touch)
+			}
+			canvas.onmousedown(touch)
+			lastTouch.x = touch.pageX
+			lastTouch.y = touch.pageY
+			break;
+		case 2:
+			if(lastTouchCtr == 1){
+				canvas.onmouseup(touches[0])
+			}
+			// zoom enabled :)
+			break;
+	}
+	lastDown = downTime;
+	lastTouchCtr = touches.length
+	lastTouchDistance = 0
+}
+canvas.ontouchstart  = e => updateTouches(e, true)
+canvas.ontouchcancel = e => updateTouches(e, false)
+canvas.ontouchend    = e => updateTouches(e, false)
+
+var lastTouchDistance = 0
+canvas.ontouchmove = e => {
+	e.preventDefault()
+	var touches = e.touches
+	switch(touches.length){
+		case 1:
+			var touch = touches[0]
+			canvas.onmousemove({
+				pageX: touch.pageX,
+				pageY: touch.pageY,
+				movementX: touch.pageX - lastTouch.x,
+				movementY: touch.pageY - lastTouch.y
+			})
+			lastTouch.x = touch.pageX
+			lastTouch.y = touch.pageY
+			break;
+		case 2:
+			// zoom similar to mousewheel
+			var touchDistance = sqrt(
+				sq(touches[1].pageX - touches[0].pageX) + 
+				sq(touches[1].pageY - touches[0].pageY))
+			if(touchDistance && lastTouchDistance){
+				var amount = touchDistance/lastTouchDistance
+				changeZoom(amount,
+					(touches[0].pageX+touches[1].pageX)/2,
+					(touches[0].pageY+touches[1].pageY)/2)
+			}
+			lastTouchDistance = touchDistance
+			break;
+	}
+}
+
+deleteButton.onclick = deleteSelected
+
+// for mobile devices only allow landscape mode :)
+try {
+	screen.orientation.lock('landscape')
+		.catch(e => {})
+} catch(e){}
 
 readHTMLArgs()
 update(true)

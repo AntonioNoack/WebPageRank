@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+	<meta charset="UTF-8"/>
+	<title>PageRank & HITS Calculator, App</title>
+	<meta name="viewport" content="width=device-width" initial-scale="2.0">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="mobile-mobile-web-app-capable" content="yes">
+	<meta charset="utf-8" emacsmode="-*- markdown -*-"><link rel="stylesheet" href="style.css">
+	<link rel="apple-touch-icon" sizes="144x144" href="https://phychi.com/img/apple-touch-icon.png">
+	<link rel="icon" type="image/png" href="https://phychi.com/img/fav128.png" sizes="128x128">
+	<link rel="icon" type="image/png" href="https://phychi.com/img/fav64.png" sizes="64x64">
+	<link rel="icon" type="image/png" href="https://phychi.com/img/fav32.png" sizes="32x32">
+	<link rel="icon" type="image/png" href="https://phychi.com/img/fav16.png" sizes="16x16">
+	<meta name="theme-color" content="#00011d"><!--toolbar color is changeable O.o-->
+	<meta name="author" content="Antonio Noack"/>
+	<meta name="description" content="This site is a list of pages about me, Antonio Noack, my projects, and my life.">
+</head>
+<body>
+	<canvas id="canvas"></canvas>
+	<div id="controls">
+		<h1>PageRank & HITS Calculator</h1>
+		<p>The nodes show HubScore, AuthScore, and below that PageRank.</p>
+		<h2>General Controls</h2>
+		<p>Double click everything ;)</p>
+		<p>You can delete things by pressing your delete key.</p>
+		<p>Drag nodes onto each other to connect/split them.</p>
+		<br>
+		<p>Import / Export Data <input id="importData" type="text" placeholder='{"vertices":[{"name":"A"},...],"edges":[[0,1,1],...]}'></p>
+		<p>Share your graph <input id="shareGraph" type="text" placeholder=''></p>
+		<br>
+		<h2>PageRank Controls</h2>
+		<p>Random Jump Probability <input id="prRandomJump" type="number" value="0.15"></p>
+		<p>Preference Vector <input id="prPreferenceVector" type="text" placeholder="[0,0,1,0]"></p>
+		<p>Normalization <select id="prNormalize">
+			 <option value="0">Don't</option>
+			 <option value="1">1</option>
+			 <option value="v">|V|</option>
+		</select></p>
+		<br>
+		<h2>HITS Controls</h2>
+		<p>Normalization <select id="hitsNormalize">
+			 <option value="0">Don't</option>
+			 <option value="1">1</option>
+			 <option value="v">|V|</option>
+		</select></p>
+		<br>
+		<p><a href="app.js" target="_blank">See the source</a></p>
+		<p><a href="https://phychi.com/pagerank">See the documentation</a></p>
+	</div>
+	<script src="app.js"></script>
+</body>

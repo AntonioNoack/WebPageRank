@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+	<meta charset="UTF-8"/>
+	<title>PageRank & HITS Calculator</title>
+	<meta name="viewport" content="width=device-width" initial-scale="2.0">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="mobile-mobile-web-app-capable" content="yes">
+	<meta charset="utf-8" emacsmode="-*- markdown -*-"><link rel="stylesheet" href="https://casual-effects.com/markdeep/latest/slate.css">
+	<link rel="apple-touch-icon" sizes="144x144" href="https://phychi.com/img/apple-touch-icon.png">
+	<link rel="icon" type="image/png" href="https://phychi.com/img/fav128.png" sizes="128x128">
+	<link rel="icon" type="image/png" href="https://phychi.com/img/fav64.png" sizes="64x64">
+	<link rel="icon" type="image/png" href="https://phychi.com/img/fav32.png" sizes="32x32">
+	<link rel="icon" type="image/png" href="https://phychi.com/img/fav16.png" sizes="16x16">
+	<meta name="theme-color" content="#00011d"><!--toolbar color is changeable O.o-->
+	<meta name="author" content="Antonio Noack"/>
+	<meta name="description" content="This site is a list of pages about me, Antonio Noack, my projects, and my life.">
+</head>
+<body>
+	
+	  **PageRank & HITS Calculator**
+      For your data science needs
+	 
+The program can be found [here](calc).
+	
+About 
+==============
+I am a computer science student from Jena, Germany. I intend to study Computational and Data Science after I finished my bachelor thesis in the area of the Semantic Web.
+
+When looking for a good online tool to calculate PageRank and HITS scores for my thesis example, I found a nice program, however without settings, for PageRank, and none for HITS.
+Since both are relatively easy to calculate, I wrote my own website for that.
+
+Data Import
+==============
+You can create graphs in two ways: either drag nodes, and connect them, and such, or you can upload a JSON file containing the data. Do give you examples, you can export to JSON as well.
+
+Format
+--------------
+The JSON data is a JSON object containing two fields, similar to the graph definition of G = (V, E).
+
+Vertices(V)
+--------------
+The first field, an array, describes the vertices. It's called "vertices".
+
+Each node/vertex can have a name ("name"), and stored values for PageRank (property "pr"), and HITS (properties "hub" + "auth" for hub and auth-scores).
+Additionally, the properties x, y, backgroundColor, and textColor are used for the visuals.
+
+Edges (E)
+--------------
+The edges, called "edges", are encoded as a list of triples (an array each).
+Each triple has the following structure: 
+
+`````````json
+[
+	"index of from-vertex",
+	"index of to-vertex",
+	"weight"
+]
+`````````
+
+e.g.
+
+`````````json
+[
+	0,
+	1, 
+	0.5
+]
+`````````
+
+for an edge from the first node to the second, with a weight of 0.5.
+
+If the weight property is missing, it's assumed to be 1.
+
+Example
+----------------
+`````````json
+{
+	"vertices": [
+		{
+			"name": "Node 0, first",
+			"x": 0, "y": 0,
+			"pr": 0.5,
+			"hub": 1,
+			"auth": 2
+		},
+		{
+			"name": "Node 1, second",
+			"x": 3, "y": 0,
+		}
+	],
+	"edges": [
+		[0,1,1]
+	]
+}
+`````````
+
+Additionally, the data can be passed as a link argument ("data").
+
+The program, using the example, is [here](calc/index.html?data=%7B%22vertices%22%3A%5B%7B%22name%22%3A%22Node%200%2C%20first%22%2C%22x%22%3A0%2C%22y%22%3A0%2C%22pr%22%3A0.5%2C%22hub%22%3A1%2C%22auth%22%3A2%7D%2C%7B%22name%22%3A%22Node%201%2C%20second%22%2C%22x%22%3A3%2C%22y%22%3A0%7D%5D%2C%22edges%22%3A%5B%5B0%2C1%2C1%5D%5D%7D).
+
+<style class="fallback">body{visibility:hidden}</style><script>markdeepOptions={tocStyle:'long'};</script>
+<!-- Markdeep: --><script src="https://casual-effects.com/markdeep/latest/markdeep.min.js?" charset="utf-8"></script>
+</body>
